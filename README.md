@@ -162,8 +162,11 @@ Fully quit and reopen Claude Desktop. You should see 4 tools under a
 - The MCP server only ever reads local SQLite — it never talks to LoseIt
   itself. All the network activity is in `scraper.py`, run on its own
   schedule.
-- Scope: daily summary (including aggregate exercise calories burned),
-  food log, weight, and water. Individual exercise entries are not scraped.
+- Scope: daily summary (including aggregate exercise calories burned and
+  the day's nutrient totals from the My Nutrients tab: protein, carbs, fat,
+  saturated fat, fiber, sugars, sodium, cholesterol), food log, weight, and
+  water. Food log rows carry calories only; per-item nutrients are not
+  scraped. Individual exercise entries are not scraped.
 - Persistent logs live under `~/.loseit-data/logs/`. Success stamp:
   `~/.loseit-data/last_success`.
 - If LoseIt rejects the saved refresh token (for example after a password

@@ -1,6 +1,6 @@
 """Unit tests for pure text parsers in scraper.py (no browser needed)."""
 import pytest
-from scraper import _parse_number, _parse_quantity
+from scraper import _parse_nutrient, _parse_number, _parse_quantity
 
 
 @pytest.mark.parametrize(
@@ -70,3 +70,13 @@ def test_parse_number(text, expected):
 def test_parse_number_invalid_raises():
     with pytest.raises(ValueError):
         _parse_number("n/a")
+
+
+@pytest.mark.parametrize("text,unit,expected", [
+    ("19.5g", "g", 19.5),
+    ("2,581.4mg", "mg", 2581.4),
+    ("0mg", "mg", 0.0),
+    (None, "g", 0.0),
+])
+def test_parse_nutrient(text, unit, expected):
+    assert _parse_nutrient(text, unit) == expected

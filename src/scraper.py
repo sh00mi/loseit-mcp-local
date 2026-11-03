@@ -328,6 +328,27 @@ def _summary_value(page, label: str):
     )
 
 
+# Labels as observed on the My Nutrients tab (Nov 2026).
+_NUTRIENT_LABELS = {
+    "protein_g": ("Protein", "g"),
+    "carbs_g": ("Carbohydrates", "g"),
+    "fat_g": ("Fat", "g"),
+    "sat_fat_g": ("Saturated Fat", "g"),
+    "fiber_g": ("Fiber", "g"),
+    "sugars_g": ("Sugars", "g"),
+    "sodium_mg": ("Sodium", "mg"),
+    "cholesterol_mg": ("Cholesterol", "mg"),
+}
+
+
+def _parse_nutrient(text, unit: str) -> float:
+    """'2,581.4mg' -> 2581.4. A missing row reads as 0, matching an empty day."""
+    text = (text or "0").strip()
+    if text.endswith(unit):
+        text = text[: -len(unit)]
+    return _parse_number(text)
+
+
 def _nutrient_value(page, label: str):
     """Read a value from the 'My Nutrients' tab table: a label <td>
     followed by a sibling value <td> like '140g'."""
@@ -546,9 +567,10 @@ def fetch_day(page, day: date) -> bool:
 
     _click_tab(page, "My Nutrients")
     page.wait_for_timeout(500)
-    protein_g = _parse_number((_nutrient_value(page, "Protein") or "0g").rstrip("g"))
-    carbs_g = _parse_number((_nutrient_value(page, "Carbohydrates") or "0g").rstrip("g"))
-    fat_g = _parse_number((_nutrient_value(page, "Fat") or "0g").rstrip("g"))
+    nutrients = {
+        col: _parse_nutrient(_nutrient_value(page, label), unit)
+        for col, (label, unit) in _NUTRIENT_LABELS.items()
+    }
 
     db.upsert_daily_summary({
         "date": day.isoformat(),
@@ -557,9 +579,7 @@ def fetch_day(page, day: date) -> bool:
         "exercise_calories_burned": exercise_calories_burned,
         "calories_remaining_before_exercise": calorie_budget - calories_eaten,
         "calories_remaining_after_exercise": calorie_budget - calories_eaten + exercise_calories_burned,
-        "protein_g": protein_g,
-        "carbs_g": carbs_g,
-        "fat_g": fat_g,
+        **nutrients,
         "notes": notes,
     })
 

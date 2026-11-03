@@ -19,7 +19,11 @@ def _default_range(days: int):
 
 @mcp.tool()
 def get_daily_summary(start_date: str = None, end_date: str = None, days: int = 7) -> list[dict]:
-    """Get daily calorie budget/eaten/remaining, macro totals, and journal notes.
+    """Get daily calorie budget/eaten/remaining, nutrient totals, and journal notes.
+
+    Nutrient totals are the day's sums from LoseIt: protein_g, carbs_g, fat_g,
+    sat_fat_g, fiber_g, sugars_g, sodium_mg, cholesterol_mg. Use this, not
+    get_food_log, for fiber or any other nutrient question.
 
     Args:
         start_date: YYYY-MM-DD, optional
@@ -33,7 +37,11 @@ def get_daily_summary(start_date: str = None, end_date: str = None, days: int = 
 
 @mcp.tool()
 def get_food_log(start_date: str = None, end_date: str = None, days: int = 7) -> list[dict]:
-    """Get individual logged food items with per-item calories and macros.
+    """Get individual logged food items with per-item calories.
+
+    Per-item nutrients (protein_g, carbs_g, fat_g) are always null: the
+    scraper does not open each entry. A null there does not mean LoseIt has
+    no data for the food. Use get_daily_summary for the day's nutrient totals.
 
     Args:
         start_date: YYYY-MM-DD, optional

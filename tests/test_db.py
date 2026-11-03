@@ -105,6 +105,7 @@ def test_migrate_adds_notes_column_to_existing_db(tmp_path, monkeypatch):
     with sqlite3.connect(path) as conn:
         cols = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
         assert "notes" in cols
+        assert {"fiber_g", "sugars_g", "sat_fat_g", "sodium_mg", "cholesterol_mg"} <= cols
         note = conn.execute(
             "SELECT notes FROM daily_summary WHERE date = '2026-07-10'"
         ).fetchone()[0]
@@ -246,3 +247,11 @@ def test_latest_date_returns_max(tmp_db):
     db.upsert_daily_summary(_summary("2026-07-12"))
     db.upsert_daily_summary(_summary("2026-07-11"))
     assert db.latest_date("daily_summary") == "2026-07-12"
+
+
+def test_upsert_daily_summary_stores_extra_nutrients(tmp_db):
+    db.upsert_daily_summary(_summary("2026-07-10", fiber_g=19.5, sodium_mg=2581.4))
+    row = db.query_daily_summary("2026-07-10", "2026-07-10")[0]
+    assert row["fiber_g"] == 19.5
+    assert row["sodium_mg"] == 2581.4
+    assert row["sugars_g"] is None

@@ -33,6 +33,11 @@ CREATE TABLE IF NOT EXISTS daily_summary (
     protein_g REAL,
     carbs_g REAL,
     fat_g REAL,
+    sat_fat_g REAL,
+    fiber_g REAL,
+    sugars_g REAL,
+    sodium_mg REAL,
+    cholesterol_mg REAL,
     notes TEXT,
     fetched_at TEXT DEFAULT (datetime('now'))
 );
@@ -58,11 +63,17 @@ CREATE TABLE IF NOT EXISTS water_log (
 _FOOD_LOG_COLS = "id, date, meal, name, brand, quantity, units, calories, protein_g, carbs_g, fat_g, fetched_at"
 
 
+_EXTRA_NUTRIENTS = ("sat_fat_g", "fiber_g", "sugars_g", "sodium_mg", "cholesterol_mg")
+_ADDED_SUMMARY_COLS = [("notes", "TEXT")] + [(c, "REAL") for c in _EXTRA_NUTRIENTS]
+
+
 def _migrate(conn: sqlite3.Connection):
     """Apply schema changes for DBs created before newer columns."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
-    if cols and "notes" not in cols:
-        conn.execute("ALTER TABLE daily_summary ADD COLUMN notes TEXT")
+    if cols:
+        for col, typ in _ADDED_SUMMARY_COLS:
+            if col not in cols:
+                conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {col} {typ}")
     # The old UNIQUE(date, meal, name, quantity, units) merged two identical
     # entries in one meal into one row; days are now replaced whole instead.
     sql = conn.execute(
@@ -100,17 +111,18 @@ def get_conn():
 
 
 def upsert_daily_summary(row: dict):
-    # Default notes to None so older call sites / partial dicts still work.
-    row = {"notes": None, **row}
+    row = {"notes": None, **{c: None for c in _EXTRA_NUTRIENTS}, **row}
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO daily_summary
                (date, calorie_budget, calories_eaten, exercise_calories_burned,
                 calories_remaining_before_exercise, calories_remaining_after_exercise,
-                protein_g, carbs_g, fat_g, notes)
+                protein_g, carbs_g, fat_g, sat_fat_g, fiber_g, sugars_g,
+                sodium_mg, cholesterol_mg, notes)
                VALUES (:date, :calorie_budget, :calories_eaten, :exercise_calories_burned,
                        :calories_remaining_before_exercise, :calories_remaining_after_exercise,
-                       :protein_g, :carbs_g, :fat_g, :notes)
+                       :protein_g, :carbs_g, :fat_g, :sat_fat_g, :fiber_g, :sugars_g,
+                       :sodium_mg, :cholesterol_mg, :notes)
                ON CONFLICT(date) DO UPDATE SET
                  calorie_budget=excluded.calorie_budget,
                  calories_eaten=excluded.calories_eaten,
@@ -120,6 +132,11 @@ def upsert_daily_summary(row: dict):
                  protein_g=excluded.protein_g,
                  carbs_g=excluded.carbs_g,
                  fat_g=excluded.fat_g,
+                 sat_fat_g=excluded.sat_fat_g,
+                 fiber_g=excluded.fiber_g,
+                 sugars_g=excluded.sugars_g,
+                 sodium_mg=excluded.sodium_mg,
+                 cholesterol_mg=excluded.cholesterol_mg,
                  notes=excluded.notes,
                  fetched_at=datetime('now')
             """,

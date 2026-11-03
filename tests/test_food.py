@@ -39,7 +39,10 @@ def fake_day(monkeypatch):
     monkeypatch.setattr(scraper, "_goto_date", lambda page, day: None)
     monkeypatch.setattr(scraper, "_click_tab", lambda page, label: None)
     monkeypatch.setattr(scraper, "_day_notes", lambda page: None)
-    monkeypatch.setattr(scraper, "_nutrient_value", lambda page, label: "0g")
+    monkeypatch.setattr(
+        scraper, "_nutrient_value",
+        lambda page, label: "0mg" if label in ("Sodium", "Cholesterol") else "0g",
+    )
     monkeypatch.setattr(
         scraper, "_summary_value", lambda page, label: state["food"] if label == "Food" else summary[label]
     )
