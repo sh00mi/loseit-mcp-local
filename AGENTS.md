@@ -51,9 +51,15 @@ solving a CAPTCHA on every login).
   `fetch_weight`, and `fetch_water` read the live site. Individual exercise
   entries are deliberately not scraped; only the day's exercise-calorie
   total is kept, so remaining calories match LoseIt's own figure.
+- `src/daily_email.py` — renders one stored day as the bot-parsable
+  `loseit-daily/1` email body; `run-scraper.sh` sends it to
+  `LOSEIT_DAILY_SUMMARY_EMAIL` after a successful run. Changing the format
+  breaks downstream parsers: bump the `format:` version.
 - `scripts/install-launchd.sh` — writes launchd agents into
   `~/Library/LaunchAgents` with absolute paths derived at install time
   (labels: `com.loseit-mcp.scraper`, `com.loseit-mcp.scraper-health`).
+  `--email` / `--summary-email` put the addresses in the plist env only;
+  never commit a real address.
 - `requirements.txt` — playwright, mcp, httpx (token API).
 
 ## Changing the scraper

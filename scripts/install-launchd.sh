@@ -5,6 +5,7 @@
 #   bash scripts/install-launchd.sh
 #   bash scripts/install-launchd.sh --email you@example.com
 #   LOSEIT_ALERT_EMAIL=you@example.com bash scripts/install-launchd.sh
+#   bash scripts/install-launchd.sh --summary-email bot@example.com
 #
 # Absolute paths are written into ~/Library/LaunchAgents at install time so
 # nothing machine-specific needs to live in the repo.
@@ -31,10 +32,11 @@ LEGACY_LABELS=(
 )
 
 ALERT_EMAIL="${LOSEIT_ALERT_EMAIL:-}"
+SUMMARY_EMAIL="${LOSEIT_DAILY_SUMMARY_EMAIL:-}"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--email ADDRESS]
+Usage: $(basename "$0") [--email ADDRESS] [--summary-email ADDRESS]
 
 Install launchd agents for the daily LoseIt scrape (06:00) and stale-run
 health check (12:00). Paths are derived from this repo checkout and \$HOME.
@@ -42,6 +44,10 @@ health check (12:00). Paths are derived from this repo checkout and \$HOME.
 Options:
   --email ADDRESS   Set LOSEIT_ALERT_EMAIL in the agents (failure/stale alerts).
                     Also accepted via the LOSEIT_ALERT_EMAIL environment variable.
+  --summary-email ADDRESS
+                    Set LOSEIT_DAILY_SUMMARY_EMAIL: after each successful scrape,
+                    email yesterday's data there. Also accepted via the
+                    LOSEIT_DAILY_SUMMARY_EMAIL environment variable.
   -h, --help        Show this help.
 EOF
 }
@@ -56,6 +62,14 @@ while [[ $# -gt 0 ]]; do
       ALERT_EMAIL="${2:-}"
       if [[ -z "$ALERT_EMAIL" ]]; then
         echo "error: --email requires an address" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --summary-email)
+      SUMMARY_EMAIL="${2:-}"
+      if [[ -z "$SUMMARY_EMAIL" ]]; then
+        echo "error: --summary-email requires an address" >&2
         exit 1
       fi
       shift 2
@@ -76,12 +90,19 @@ if [[ ! -x "${PROJECT}/.venv/bin/python" ]]; then
   echo "warning: ${PROJECT}/.venv/bin/python not found; create the venv before the first scheduled run." >&2
 fi
 
-# Reinstall without --email should not wipe a previously configured address.
+# Reinstall without --email / --summary-email should not wipe a previously
+# configured address.
 EXISTING_PLIST="${LAUNCH_AGENTS}/${LABEL_SCRAPER}.plist"
 if [[ -z "$ALERT_EMAIL" && -f "$EXISTING_PLIST" ]]; then
   ALERT_EMAIL="$(/usr/libexec/PlistBuddy -c 'Print :EnvironmentVariables:LOSEIT_ALERT_EMAIL' "$EXISTING_PLIST" 2>/dev/null || true)"
   if [[ -n "$ALERT_EMAIL" ]]; then
     echo "preserving alert email from existing plist"
+  fi
+fi
+if [[ -z "$SUMMARY_EMAIL" && -f "$EXISTING_PLIST" ]]; then
+  SUMMARY_EMAIL="$(/usr/libexec/PlistBuddy -c 'Print :EnvironmentVariables:LOSEIT_DAILY_SUMMARY_EMAIL' "$EXISTING_PLIST" 2>/dev/null || true)"
+  if [[ -n "$SUMMARY_EMAIL" ]]; then
+    echo "preserving daily summary email from existing plist"
   fi
 fi
 
@@ -113,6 +134,12 @@ if [[ -n "$ALERT_EMAIL" ]]; then
 else
   echo "note: no alert email set (pass --email or LOSEIT_ALERT_EMAIL)."
   echo "      Failure/stale conditions will log locally only."
+fi
+if [[ -n "$SUMMARY_EMAIL" ]]; then
+  summary_xml=$(xml_escape "$SUMMARY_EMAIL")
+  env_entries="${env_entries}
+    <key>LOSEIT_DAILY_SUMMARY_EMAIL</key>
+    <string>${summary_xml}</string>"
 fi
 
 env_block=$(cat <<EOF
@@ -215,6 +242,9 @@ echo "  wrappers: ${BIN_DIR}/"
 echo "  project:  ${PROJECT}"
 if [[ -n "$ALERT_EMAIL" ]]; then
   echo "  alert email: ${ALERT_EMAIL}"
+fi
+if [[ -n "$SUMMARY_EMAIL" ]]; then
+  echo "  daily summary email: ${SUMMARY_EMAIL}"
 fi
 echo
 echo "Test immediately:"

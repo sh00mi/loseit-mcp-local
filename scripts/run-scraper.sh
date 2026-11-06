@@ -1,7 +1,8 @@
 #!/bin/bash
 # launchd entrypoint for the daily LoseIt scrape.
 # On non-zero exit: email the captured output (if LOSEIT_ALERT_EMAIL is set).
-# On success: write ~/.loseit-data/last_success for the health check.
+# On success: write ~/.loseit-data/last_success for the health check, then
+# email yesterday's data to LOSEIT_DAILY_SUMMARY_EMAIL if it is set.
 set -euo pipefail
 
 # Prefer LOSEIT_PROJECT (set by install-launchd / launchd) so the job can
@@ -18,6 +19,7 @@ DATA_DIR="${HOME}/.loseit-data"
 LOG_DIR="${DATA_DIR}/logs"
 MARKER="${DATA_DIR}/last_success"
 ALERT_EMAIL="${LOSEIT_ALERT_EMAIL:-}"
+SUMMARY_EMAIL="${LOSEIT_DAILY_SUMMARY_EMAIL:-}"
 SCRIPT_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEND_ALERT="${SCRIPT_SELF}/send-alert.sh"
 
@@ -68,4 +70,15 @@ fi
 
 date -u +%Y-%m-%dT%H:%M:%SZ >"$MARKER"
 cat "$OUT"
+
+if [[ -n "$SUMMARY_EMAIL" ]]; then
+  DAY=$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d yesterday +%Y-%m-%d)
+  # A summary problem is logged but must not turn a good scrape into a failure.
+  if SUMMARY=$("${PROJECT}/.venv/bin/python" "${PROJECT}/src/daily_email.py" --date "$DAY" 2>&1); then
+    echo "$SUMMARY" | "$SEND_ALERT" --to "$SUMMARY_EMAIL" "LoseIt daily ${DAY}" \
+      || echo "WARNING: failed to send daily summary (see ${LOG_DIR}/alert.log)" >&2
+  else
+    echo "WARNING: daily summary not sent: ${SUMMARY}" >&2
+  fi
+fi
 exit 0

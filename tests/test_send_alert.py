@@ -86,3 +86,26 @@ def test_logs_sendmail_failure(tmp_path):
     log = (tmp_path / ".loseit-data" / "logs" / "alert.log").read_text()
     assert "FAIL exit=42" in log
     assert "WARNING: alert send failed" in result.stderr
+
+
+def test_to_overrides_recipient(tmp_path):
+    sent = tmp_path / "sent.eml"
+    fake = _fake_sendmail(tmp_path / "sendmail")
+    result = _run(
+        tmp_path,
+        {
+            "LOSEIT_ALERT_EMAIL": "",
+            "LOSEIT_SENDMAIL": str(fake),
+            "SENT_FILE": str(sent),
+        },
+        ["--to", "bot@example.com", "LoseIt daily 2026-07-10"],
+        stdin="date: 2026-07-10\n",
+    )
+    assert result.returncode == 0, result.stderr
+    raw = sent.read_text()
+    assert "To: bot@example.com" in raw
+    assert "From: bot@example.com" in raw
+    assert "Subject: LoseIt daily 2026-07-10" in raw
+    assert "date: 2026-07-10" in raw
+    log = (tmp_path / ".loseit-data" / "logs" / "alert.log").read_text()
+    assert "SENT exit=0 to=bot@example.com" in log

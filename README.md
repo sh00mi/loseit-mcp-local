@@ -90,7 +90,7 @@ Two launchd jobs (macOS):
 
 | Job | When | What |
 |-----|------|------|
-| `com.loseit-mcp.scraper` | 06:00 | Scrape via `scripts/run-scraper.sh`. On failure, emails you if configured. On success, writes `~/.loseit-data/last_success`. |
+| `com.loseit-mcp.scraper` | 06:00 | Scrape via `scripts/run-scraper.sh`. On failure, emails you if configured. On success, writes `~/.loseit-data/last_success` and sends the daily summary email if configured. |
 | `com.loseit-mcp.scraper-health` | 12:00 | If `last_success` is older than 36h (or missing and DB is stale), emails a STALE alert (at most once per day) if configured. |
 
 Alerts send through local sendmail/postfix when `LOSEIT_ALERT_EMAIL` is
@@ -100,12 +100,49 @@ set. Attempts are logged to `~/.loseit-data/logs/alert.log`. Test with:
 LOSEIT_ALERT_EMAIL=you@example.com bash scripts/send-alert.sh --test
 ```
 
+### Daily summary email (optional)
+
+Set `LOSEIT_DAILY_SUMMARY_EMAIL` and, after each successful scrape, the job
+emails the day it just fetched (yesterday) to that address, subject
+`LoseIt daily YYYY-MM-DD`. It sends through the same sendmail path as the
+alerts and is logged in `alert.log`; a send failure does not fail the scrape.
+The body is plain text meant for a bot to parse but still readable:
+
+```
+format: loseit-daily/1
+date: 2026-07-10
+calorie_budget: 2000
+calories_eaten: 1500
+...                      (every daily_summary nutrient, same names as the DB)
+weight: 180.2
+weight_units: lb
+water_fl_oz: 64
+notes: Felt good
+
+food: meal|name|brand|quantity|units|calories
+Breakfast|Eggs||2|Each|140
+```
+
+Every key is always present (empty when there is no value). Text never
+contains `|` or newlines. Preview or resend a day by hand:
+
+```bash
+.venv/bin/python src/daily_email.py --date 2026-07-10
+.venv/bin/python src/daily_email.py --date 2026-07-10 \
+  | LOSEIT_ALERT_EMAIL=you@example.com bash scripts/send-alert.sh --to bot@example.com "LoseIt daily 2026-07-10"
+```
+
+The address lives only in the installed launchd plist, never in the repo.
+
 Install the agents (paths are filled in from this checkout — nothing
 machine-specific is stored in the repo):
 
 ```bash
 # recommended: pass your alert address at install time
 bash scripts/install-launchd.sh --email you@example.com
+
+# add the daily summary email
+bash scripts/install-launchd.sh --email you@example.com --summary-email bot@example.com
 
 # or without email (failures only show up in local logs)
 bash scripts/install-launchd.sh
