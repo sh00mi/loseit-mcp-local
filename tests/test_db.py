@@ -207,3 +207,13 @@ def test_latest_date_returns_max(tmp_db):
     db.upsert_daily_summary(_summary("2026-07-12"))
     db.upsert_daily_summary(_summary("2026-07-11"))
     assert db.latest_date("daily_summary") == "2026-07-12"
+
+
+def test_delete_food_log_for_date_only_touches_that_date(tmp_db):
+    db.insert_food_log_entry(_food(date="2026-07-10"))
+    db.insert_food_log_entry(_food(date="2026-07-11"))
+
+    db.delete_food_log_for_date("2026-07-10")
+
+    assert db.query_food_log("2026-07-10", "2026-07-10") == []
+    assert len(db.query_food_log("2026-07-11", "2026-07-11")) == 1

@@ -43,6 +43,10 @@ class AuthError(RuntimeError):
     pass
 
 
+class RateLimitedError(AuthError):
+    """LoseIt answered 429: the tokens may be fine, just asked too often."""
+
+
 def _headers(device_id: str) -> dict:
     offset = datetime.now().astimezone().utcoffset()
     return {
@@ -92,7 +96,8 @@ def _token_request(form: dict, device_id: str, client: httpx.Client | None) -> t
             detail = resp.json().get("error_description") or resp.json().get("error")
         except (ValueError, AttributeError):
             detail = None
-        raise AuthError(
+        error_cls = RateLimitedError if resp.status_code == 429 else AuthError
+        raise error_cls(
             f"LoseIt {form['grant_type']} login failed (HTTP {resp.status_code}"
             + (f": {detail}" if detail else "")
             + ")."

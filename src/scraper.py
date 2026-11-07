@@ -514,7 +514,11 @@ def fetch_day(page, day: date):
         "notes": notes,
     })
 
-    for item in _meal_food_items(page):
+    # A day can be fetched again after it changed (today's log is still being
+    # filled in), so its rows are replaced rather than added to.
+    items = _meal_food_items(page)
+    db.delete_food_log_for_date(day.isoformat())
+    for item in items:
         quantity, units = _parse_quantity(item["quantity_text"])
         db.insert_food_log_entry({
             "date": day.isoformat(),
@@ -554,14 +558,15 @@ def fetch_weight(page, day: date):
         """() => {
             // LoseIt uses two shapes for the weight widget:
             // - a disabled gwt-TextBox on some past days / empty states
-            // - an editable `gwt-TextBox GPOEIKGBUC` once a weight is logged
-            //   (same class family as the water input; safe here because we
-            //   are on the Weight tab after the nav dance above)
+            // - an editable gwt-TextBox on today's date
+            // GWT's second class is an obfuscated name that changes between
+            // LoseIt builds, so match the visible box holding a number; the
+            // search and comment boxes on the page hold words.
             const disabled = document.querySelector('input.gwt-TextBox[disabled]');
             if (disabled && disabled.value.trim()) return disabled.value.trim();
             const inputs = Array.from(document.querySelectorAll('input.gwt-TextBox'));
             const el = inputs.find(
-                i => i.className.trim() === 'gwt-TextBox GPOEIKGBUC' && !i.disabled
+                i => !i.disabled && i.offsetWidth > 0 && /^\\d+(\\.\\d+)?$/.test(i.value.trim())
             );
             return el ? el.value.trim() : '';
         }"""
@@ -582,7 +587,11 @@ def fetch_water(page, day: date):
     _click_tab(page, "Weight")
     page.wait_for_timeout(300)
     _goto_date(page, day)
-    _click_tab(page, "Water Intake")
+    try:
+        _click_tab(page, "Water Intake")
+    except RuntimeError:
+        # Accounts that don't track water have no Water Intake tab.
+        return
     page.wait_for_timeout(500)
     value = page.evaluate(
         """() => {
@@ -652,9 +661,12 @@ def resolve_since(since: str | None, today: date | None = None) -> date:
     return date.fromisoformat(last) if last else (today - timedelta(days=7))
 
 
-def run(since: date, headed: bool):
+def run(since: date, headed: bool, include_today: bool = False):
     try:
         auth.refresh_session(STATE_PATH)
+    except auth.RateLimitedError as exc:
+        # The saved cookies may still have days left; let the expiry check decide.
+        print(f"LoseIt rate-limited the session refresh ({exc}); trying the saved one.")
     except auth.AuthError as exc:
         print(f"LoseIt rejected the saved refresh token: {exc} {auth.LOGIN_HINT}")
         sys.exit(1)
@@ -674,12 +686,13 @@ def run(since: date, headed: bool):
     db.init_db()
     today = date.today()
     yesterday = today - timedelta(days=1)
-    if since > yesterday:
-        print(f"Nothing to fetch: since {since.isoformat()} is not before today.")
+    last_day = today if include_today else yesterday
+    if since > last_day:
+        print(f"Nothing to fetch: since {since.isoformat()} is after {last_day.isoformat()}.")
         return
-    n_days = (yesterday - since).days + 1
+    n_days = (last_day - since).days + 1
     print(
-        f"Catching up {n_days} day(s) from {since.isoformat()} through {yesterday.isoformat()}."
+        f"Catching up {n_days} day(s) from {since.isoformat()} through {last_day.isoformat()}."
     )
     d = since
     with sync_playwright() as p:
@@ -688,7 +701,7 @@ def run(since: date, headed: bool):
         page = context.new_page()
         _open_logged_in_home(page)
 
-        while d < today:
+        while d <= last_day:
             print(f"Fetching {d.isoformat()}...")
             fetch_day(page, d)
             fetch_weight(page, d)
@@ -710,6 +723,7 @@ if __name__ == "__main__":
     run_p = sub.add_parser("run")
     run_p.add_argument("--since", type=str, default=None, help="YYYY-MM-DD, defaults to the last recorded date (re-fetched in case it was edited) through yesterday")
     run_p.add_argument("--headed", action="store_true")
+    run_p.add_argument("--include-today", action="store_true", help="also fetch today's log so far")
     args = parser.parse_args()
 
     if args.cmd == "login":
@@ -722,4 +736,4 @@ if __name__ == "__main__":
         # for a few days, or a stretch of failed runs) up through
         # yesterday in the same pass.
         since = resolve_since(args.since)
-        run(since, args.headed)
+        run(since, args.headed, args.include_today)

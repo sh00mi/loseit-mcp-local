@@ -120,6 +120,11 @@ def insert_food_log_entry(row: dict):
         )
 
 
+def delete_food_log_for_date(date: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM food_log WHERE date = ?", (date,))
+
+
 def upsert_weight(date: str, weight: float, units: str = "lb"):
     with get_conn() as conn:
         conn.execute(
